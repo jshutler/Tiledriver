@@ -6,7 +6,7 @@
 
 import queue
 from typing import List, Tuple
-from random import randint
+# from random import randint
 
 
 class Heuristic:
@@ -98,12 +98,13 @@ class Tile_Puzzle:
        
         #if we don't provide an initial state
         else:
-            self.puzzle = list(range(self.puzzle_size ** 2))
+            self.puzzle = list(range(size ** 2))
+            self.puzzle_size = int(len(self.puzzle))
             self.empty_location_index = 0
             self.scramble(scramble_size)
 
 
-        self.puzzle_size = int(len(self.puzzle)**.5)
+        self.puzzle_size = int(len(self.puzzle))
 
         
         
@@ -114,6 +115,7 @@ class Tile_Puzzle:
         possible_moves = []
 
         for move in all_moves:
+            # print(move)
             move_index = self.get_move_index(move)
             
             if move_index is None:
@@ -125,19 +127,21 @@ class Tile_Puzzle:
 
             
     @property   
-    def frontier_states(self):
+    def frontier_states(self) -> dict:
         """Gives a dictionary of all frontiers available from this position. with the move as the key Used to make the AI"""
         frontier_states = {}
 
         # print(self.possible_moves)
-
-        for move in self.possible_moves:
+        possible_moves = self.possible_moves
+        for move in possible_moves:
+            # print(move)
             frontier_state = self.get_next_state(move)
             
             if move is None:
                 continue
 
-            frontier_states[move] = frontier_state
+            #making it a set, because prof wants a set
+            frontier_states[move] = tuple(frontier_state)
 
         return frontier_states
 
@@ -149,9 +153,10 @@ class Tile_Puzzle:
 
         move_dict = {"K": 3, "J": -3, "H": -1, "L": 1}  
 
-        # print(move)
+        
 
         move_index = self.empty_location_index + move_dict[move]
+       
 
         #if we are outside the bounds of the puzzle, return None
         invalid_move = (move_index < 0 or move_index >= self.puzzle_size) or \
@@ -203,6 +208,7 @@ class Tile_Puzzle:
         
 
     def scramble(self, scramble_size=30) -> None:
+        from random import randint
         possible_moves = ['K', 'J', 'H', 'L']
 
         #ensures the scramble can be even or odd 
@@ -220,34 +226,97 @@ class Tile_Puzzle:
 
 
 class State_Node:
-    #defining what a node will be for our a_star_search_tree
-    def __init__(self, state, previous_state, g, h):
+    #defining what a node will be for our Tiledriver_tree
+    def __init__(self, state: tuple, previous=None, last_move=None, g=0):
         self.state = state
+        self.puzzle = Tile_Puzzle(initial_state=state)
         self.visited = False
-        self.previous = previous_state
-        self.frontiers = []
-        self.path_from_initial = []
+        self.previous = previous
+        self.local_frontiers = self.puzzle.frontier_states
+        
+        if self.previous is None:
+            self.path_from_start = []
+        else:
+            #gives me a copy of the previous nodes path to start
+            self.path_from_start = previous.path_from_start[:]
+            self.path_from_start.append(last_move)
+            # print(self.path_from_start)
 
-        #distance from initial state
+
+        #distance from start
         self.g = g
+
         #estimated distance to goal
-        self.h = h
+        self.h = Heuristic.get(state)
         #most important distance
-        self.f = g + h
+        self.f = self.g + self.h
 
 
-        def __repr__(self):
-            return self.state
+    def __repr__(self):
+        return " ".join([str(x) for x in self.state])
 
-class A_Star_Search:
+    def __lt__(self, other):
+        """We need this for the Priority queue, but there is no good way to define less than or greater than
+        for a state. so we will just arbitrarily return the first one"""
+        return self
+        pass
+
+class Tiledriver:
     def __init__(self, initial_state: Tuple[int, ...]):
-        self.puzzle = Tile_Puzzle(initial_state = initial_state)
-        self.frontiers = self.puzzle.frontier_states
+        self.initial_node = State_Node(initial_state)
+        #gives what frontier to search next
+        self.all_frontiers = queue.PriorityQueue()
+        self.goal = tuple(sorted(list(initial_state)))
+
+    def main(self) -> str:
+        #adding the initial frontiers
+            # self.add_frontiers()
+
+        #searching our starting node
+        self.add_frontiers(self.initial_node)
+
+
+       #searching next node 
+        next_move, new_node = self.all_frontiers.get()
+
+        while new_node.h != 0:
+            self.add_frontiers(new_node)
+            #searching next node 
+            next_move, new_node = self.all_frontiers.get()
+
+        print(self.initial_node)
+        print(new_node.path_from_start)
+        print(new_node)
+
+        return ''.join(new_node.path_from_start)
+            
+
+
+        # while current_node.state != self.goal:
+        #     self.search_node()
+
+
+    def add_frontiers(self, node=None):
+        """Adds new frontiers to the total number of frontiers to search"""
+        #lets us loop through the move that gets us to the frontier, and the frontier itself
+        for move, frontier in zip(node.local_frontiers.keys(), node.local_frontiers.values()):
+            frontier_node = State_Node(frontier, previous=node, last_move=move, g=node.g+1)
+            self.all_frontiers.put((frontier_node.f, frontier_node))
+            # print(self.all_frontiers.get())
+        
+        #we don't want to add a frontier state that will simply reverse us back to where we were
+        opposite_move = {"K":"J", "J":"K", "L":"H", "H":"L"}
 
 
 
 
 
+
+    def print_frontiers(self):
+        while not self.all_frontiers.empty():
+            f, frontier = self.all_frontiers.get()
+            print(frontier)
+            print('current_path: ', frontier.path_from_start)
 
         
 
@@ -259,14 +328,25 @@ def solve_puzzle(tiles: Tuple[int, ...]) -> str:
     optimal set of moves to solve the given puzzle.
 
     """
-    puzzle = A_Star_Search(tiles)
+    puzzle = Tiledriver(tiles)
+    optimal_path = puzzle.main()
+    return optimal_path
+    # while not puzzle.all_frontiers.empty():
+    #     item = puzzle.all_frontiers.get()
+    #     print(item)
 
 
 
 def main() -> None:
     """Optional: Use as a driver to test your program."""
     # initial_state = make_puzzle(size=3)
-    solve_puzzle((1,2,0,3,4,5,6,7,8))
+    state = (1,4,2,3,0,5,6,7,8)
+    puzzle_state = Tile_Puzzle(scramble_size=1000).puzzle
+    optimal_path = solve_puzzle(puzzle_state)
+
+    print(puzzle_state)
+    print(optimal_path, len(optimal_path))
+
 
 
 
