@@ -94,7 +94,14 @@ class Heuristic:
 
 
 class TilePuzzle:
-    def __init__(self, size=3, initial_state=None, scramble_size=30):
+    def __init__(self, size, initial_state=None, scramble_size=30):
+        self.puzzle_length = int(size**2)
+        self.width = size
+        self.indices_that_cant_move_right = [size*(i) -1 for i in range(1,size)]
+        self.indices_that_cant_move_left = [size*(i) for i in range(1, size)]
+        self.move_dict = {"K": size, "J": -size, "H": 1, "L": -1}
+
+        # print(self.width)
         #if initial state is provided
         if initial_state is not None:
             self.puzzle = list(initial_state)
@@ -103,12 +110,11 @@ class TilePuzzle:
         #if we don't provide an initial state
         else:
             self.puzzle = list(range(size ** 2))
-            self.puzzle_size = int(len(self.puzzle))
             self.empty_location_index = 0
-            # self.scramble(scramble_size)
+            self.scramble(scramble_size)
 
 
-        self.puzzle_size = int(len(self.puzzle))
+        
 
 
     @property   
@@ -117,7 +123,6 @@ class TilePuzzle:
         possible_moves = []
 
         for move in all_moves:
-            # print(move)
             move_index = self.get_move_index(move)
             
             if move_index is None:
@@ -137,7 +142,6 @@ class TilePuzzle:
         # print(self.possible_moves)
         possible_moves = self.possible_moves
         for move in possible_moves:
-            # print(move)
             frontier_state = self.get_next_state(move)
             
             if move is None:
@@ -155,21 +159,14 @@ class TilePuzzle:
 
     def get_move_index(self, move: str) -> int or None:
         """Gives us the index of the piece we want to move"""
+         
 
-        move_dict = {"K": 3, "J": -3, "H": -1, "L": 1}  
+        move_index = self.empty_location_index + self.move_dict[move]
 
-        move_index = self.empty_location_index + move_dict[move]
-       
-
-        #if we are outside the bounds of the puzzle, return None
-        invalid_move = (move_index < 0 or move_index >= self.puzzle_size) or \
-        ((self.empty_location_index == 2 or self.empty_location_index == 5) \
-            and move_dict[move] == 1) or \
-        ((self.empty_location_index == 3 or self.empty_location_index == 6) \
-            and move_dict[move] == -1)
-
-
+        invalid_move = (move_index < 0 or move_index >= self.puzzle_length) or \
+        (move == "H" and move_index in self.indices_that_cant_move_left) or (move == "L" and move_index in self.indices_that_cant_move_right)
         if invalid_move: 
+
             return None
 
         return move_index
@@ -186,8 +183,7 @@ class TilePuzzle:
         #gives us a copy of the puzzle
         copy_of_puzzle = self.puzzle[:]
 
-        copy_of_puzzle[self.empty_location_index] = \
-        copy_of_puzzle[index_of_piece_moving]
+        copy_of_puzzle[self.empty_location_index] = copy_of_puzzle[index_of_piece_moving]
 
         copy_of_puzzle[index_of_piece_moving] = 0
 
@@ -202,8 +198,7 @@ class TilePuzzle:
         if index_of_piece_moving is None:
             return False 
         
-        self.puzzle[self.empty_location_index] = \
-        self.puzzle[index_of_piece_moving]
+        self.puzzle[self.empty_location_index] = self.puzzle[index_of_piece_moving]
 
         self.puzzle[index_of_piece_moving] = 0
 
@@ -212,29 +207,29 @@ class TilePuzzle:
         return True
         
 
-    # def scramble(self, scramble_size=30) -> None:
-    #     from random import randint
-    #     possible_moves = ['K', 'J', 'H', 'L']
+    def scramble(self, scramble_size=30) -> None:
+        from random import randint
+        possible_moves = ['K', 'J', 'H', 'L']
 
-    #     #ensures the scramble can be even or odd 
-    #     scramble_size = randint(scramble_size, scramble_size + 1)
+        #ensures the scramble can be even or odd 
+        scramble_size = randint(scramble_size, scramble_size + 1)
 
-    #     i = 0
+        i = 0
 
-    #     while i <= scramble_size:
-    #         move = possible_moves[randint(0, 3)]
+        while i <= scramble_size:
+            move = possible_moves[randint(0, 3)]
 
-    #         piece_is_moved = self.move_piece(move)
+            piece_is_moved = self.move_piece(move)
 
-    #         if piece_is_moved:
-    #             i += 1
+            if piece_is_moved:
+                i += 1
 
 
 class StateNode:
     #defining what a node will be for our Tiledriver_tree
     def __init__(self, state: tuple, previous=None, last_move=None, g=0):
         self.state = state
-        self.puzzle = TilePuzzle(initial_state=state)
+        self.puzzle = TilePuzzle(int(len(state)**(1/2)), initial_state=state)
         self.visited = False
         self.previous = previous
         self.local_frontiers = self.puzzle.frontier_states
@@ -281,11 +276,15 @@ class Tiledriver:
         #adding the initial frontiers
             # self.add_frontiers()
 
+        #base case
+        if self.initial_node.h == 0:
+            return ''
+
         #searching our starting node
         self.add_frontiers(self.initial_node)
 
        #searching next node 
-        next_move, new_node = self.all_frontiers.get()
+        new_node = self.all_frontiers.get()[1]
 
         while new_node.h != 0:
             self.add_frontiers(new_node)
@@ -305,23 +304,18 @@ class Tiledriver:
         
         #lets us loop through the move that gets us to the frontier, 
         #and the frontier itself
-        for move, frontier in \
-        zip(node.local_frontiers.keys(), node.local_frontiers.values()):
+        for move, frontier in zip(node.local_frontiers.keys(), node.local_frontiers.values()):
 
             #if this is not the first iteration of adding frontiers
             if node is not None:
                 #if the move given is the opposite move:
                 #i.e. moving left then immediately right,
                 #then we don't want that frontier added
-                # print(node.path_from_start)
-                if node.path_from_start != [] and \
-                opposite_move[move] == node.path_from_start[-1]:
+                if node.path_from_start != [] and opposite_move[move] == node.path_from_start[-1]:
                     continue
 
-            frontier_node = \
-            StateNode(frontier, previous=node, last_move=move, g=node.g + 1)
+            frontier_node = StateNode(frontier, previous=node, last_move=move, g=node.g + 1)
             self.all_frontiers.put((frontier_node.f, frontier_node))
-            # print(self.all_frontiers.get())
 
 
 def solve_puzzle(tiles: Tuple[int, ...]) -> str:
@@ -332,24 +326,26 @@ def solve_puzzle(tiles: Tuple[int, ...]) -> str:
     """
     driver = Tiledriver(tiles)
     optimal_path = driver.main()
-    return optimal_path
-   
+    return optimal_path   
 
-# def main() -> None:
-#     """Optional: Use as a driver to test your program."""
-#     # initial_state = make_puzzle(size=3)
-#     from timeit import default_timer
-#     start = default_timer()
-#     iterations = 1000
+def main() -> None:
+    """Optional: Use as a driver to test your program."""
 
-#     for i in range(iterations):
-        
-#         puzzle_state = TilePuzzle(scramble_size=1000).puzzle
-#         print(puzzle_state)
-#         optimal_path = solve_puzzle(puzzle_state)
+
+    iterations = 3
+
+    for i in range(iterations):  
+        puzzle_state = TilePuzzle(scramble_size=1000, size=4).puzzle
+        print(puzzle_state)
+        optimal_path = solve_puzzle(puzzle_state)
+        print(optimal_path)
+
+
+if __name__ == "__main__":
+    # state2 = (1,0,2,3)
+    # state3 = (8, 2, 0, 5, 4, 3, 7, 1, 6)
+
+    # optimal_path = solve_puzzle(state3)
     
-
-    
-
-# if __name__ == "__main__":
-#     main()
+    # print(optimal_path, len(optimal_path))
+    main()
