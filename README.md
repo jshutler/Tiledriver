@@ -31,4 +31,7 @@ It requires an the initial state of a puzzle, and then finds the optimal path to
 
 
 
-The Heuristic class was given to me by my professor, but the rest was written exclusively by me.
+
+
+
+**The Heuristic class was given to me by my professor, but the rest was written exclusively by me.**
